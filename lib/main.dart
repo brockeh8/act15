@@ -86,3 +86,146 @@ class InventoryApp extends StatelessWidget {
     );
   }
 }
+
+class AddEditItemScreen extends StatefulWidget {
+  static const routeName = '/addEdit';
+  const AddEditItemScreen({super.key, this.item});
+  final Item? item; // if non-null => edit mode
+
+  @override
+  State<AddEditItemScreen> createState() => _AddEditItemScreenState();
+}
+
+class _AddEditItemScreenState extends State<AddEditItemScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _qtyCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
+  final _categoryCtrl = TextEditingController();
+  bool get _edit => widget.item != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_edit) {
+      final it = widget.item!;
+      _nameCtrl.text = it.name;
+      _qtyCtrl.text = it.quantity.toString();
+      _priceCtrl.text = it.price.toStringAsFixed(2);
+      _categoryCtrl.text = it.category;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _qtyCtrl.dispose();
+    _priceCtrl.dispose();
+    _categoryCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final item = Item(
+      id: widget.item?.id,
+      name: _nameCtrl.text.trim(),
+      quantity: int.parse(_qtyCtrl.text.trim()),
+      price: double.parse(_priceCtrl.text.trim()),
+      category: _categoryCtrl.text.trim(),
+      createdAt: widget.item?.createdAt ?? DateTime.now(),
+    );
+
+    if (_edit) {
+      await FirestoreService.instance.updateItem(item);
+    } else {
+      await FirestoreService.instance.addItem(item);
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _delete() async {
+    if (widget.item?.id != null) {
+      await FirestoreService.instance.deleteItem(widget.item!.id!);
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // also accept Item via Navigator arguments\
+    final arg = ModalRoute.of(context)?.settings.arguments;
+    if (arg is Item && !_edit && _nameCtrl.text.isEmpty) {
+      _nameCtrl.text = arg.name;
+      _qtyCtrl.text = arg.quantity.toString();
+      _priceCtrl.text = arg.price.toStringAsFixed(2);
+      _categoryCtrl.text = arg.category;
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_edit ? 'Edit Item' : 'Add Item'),
+        actions: [
+          if (_edit)
+            IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _delete,
+            ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            children: [
+              TextFormField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name'),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _qtyCtrl,
+                decoration: const InputDecoration(labelText: 'Quantity'),
+                keyboardType: TextInputType.number,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Required';
+                  final n = int.tryParse(v);
+                  if (n == null || n < 0) return 'Enter a non-negative integer';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _priceCtrl,
+                decoration: const InputDecoration(labelText: 'Price'),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Required';
+                  final n = double.tryParse(v);
+                  if (n == null || n < 0) return 'Enter a non-negative number';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _categoryCtrl,
+                decoration: const InputDecoration(labelText: 'Category (e.g., Food, Tech)'),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _save,
+                child: Text(_edit ? 'Save Changes' : 'Add Item'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+//bonus feature: dashboard screen
